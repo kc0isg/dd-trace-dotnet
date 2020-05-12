@@ -67,22 +67,7 @@ namespace Datadog.Trace.OpenTracing
 
         public ISpan Start()
         {
-            lock (_lock)
-            {
-                ISpanContext parentContext = GetParentContext();
-                Span ddSpan = _tracer.DatadogTracer.StartSpan(_operationName, parentContext, _serviceName, _start, _ignoreActiveSpan);
-                var otSpan = new OpenTracingSpan(ddSpan);
-
-                if (_tags != null)
-                {
-                    foreach (var pair in _tags)
-                    {
-                        otSpan.SetTag(pair.Key, pair.Value);
-                    }
-                }
-
-                return otSpan;
-            }
+            return StartImpl();
         }
 
         public IScope StartActive()
@@ -92,7 +77,10 @@ namespace Datadog.Trace.OpenTracing
 
         public IScope StartActive(bool finishSpanOnDispose)
         {
-            var span = Start();
+            var span = StartImpl();
+
+            _tracer.DatadogTracer.ScopeManager.Activate(span.Span, finishSpanOnDispose);
+
             return _tracer.ScopeManager.Activate(span, finishSpanOnDispose);
         }
 
@@ -168,10 +156,30 @@ namespace Datadog.Trace.OpenTracing
             if (parentContext == null && !_ignoreActiveSpan)
             {
                 // if parent was not set explicitly, default to active span as parent (unless disabled)
-                return _tracer.ActiveSpan?.Span.Context;
+                return _tracer.DatadogTracer.ScopeManager.Active?.Span?.Context;
             }
 
             return parentContext;
+        }
+
+        private OpenTracingSpan StartImpl()
+        {
+            lock (_lock)
+            {
+                ISpanContext parentContext = GetParentContext();
+                Span ddSpan = _tracer.DatadogTracer.StartSpan(_operationName, parentContext, _serviceName, _start, _ignoreActiveSpan);
+                var otSpan = new OpenTracingSpan(ddSpan);
+
+                if (_tags != null)
+                {
+                    foreach (var pair in _tags)
+                    {
+                        otSpan.SetTag(pair.Key, pair.Value);
+                    }
+                }
+
+                return otSpan;
+            }
         }
     }
 }
